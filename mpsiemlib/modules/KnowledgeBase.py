@@ -775,8 +775,9 @@ class KnowledgeBase(ModuleInterface, LoggingHandler):
         rule = r.json()
 
         rule_groups = []
-        for i in rule.get("Groups"):
-            rule_groups.append({"id": i.get("Id"), "name": i.get("SystemName")})
+        if rule.get("Groups"):
+            for i in rule.get("Groups"):
+                rule_groups.append({"id": i.get("Id"), "name": i.get("SystemName")})
 
         ret = {"id": rule.get("Id"),
                "guid": rule.get("ObjectId"),
