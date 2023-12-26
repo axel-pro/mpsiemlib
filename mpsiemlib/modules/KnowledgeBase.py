@@ -24,6 +24,8 @@ class KnowledgeBase(ModuleInterface, LoggingHandler):
     __api_deploy_object = f'{__api_siem}/deploy'
     __api_deploy_log = f'{__api_siem}/deploy/log'
     __api_list_objects = f'{__api_siem}/objects/list'
+    __api_list_macros = f'{__api_siem}/macros/list'
+    __api_macros_code = f'{__api_siem}' + '/macros/{}'
     __api_rule_code = f'{__api_siem}' + '/{}-rules/{}'
     __api_table_info = f'{__api_siem}' + '/tabular-lists/{}'
     __api_table_rows = f'{__api_siem}' + '/tabular-lists/{}/rows'
@@ -697,6 +699,56 @@ class KnowledgeBase(ModuleInterface, LoggingHandler):
                                                                                             took_time,
                                                                                             line_counter))
 
+    def get_all_macros(self, db_name: str, filters: Optional[dict] = None) -> Iterator[dict]:
+        """
+        Выгрузка всех макросов
+
+        :param db_name: Имя БД из которой идет выгрузка
+        :return: {"param1": "value1", "param2": "value2"}
+        """
+        self.log.info('status=prepare, action=get_all_objects, msg="Try to get macros list", '
+                      'hostname="{}", db="{}", filters="{}"'.format(self.__kb_hostname, db_name, filters))
+
+        url = "https://{}:{}{}".format(self.__kb_hostname, self.__kb_port, self.__api_list_macros)
+        headers = {'Content-Database': db_name,
+                   'Content-Locale': 'RUS'}
+        params = {
+            'sort': [{'name': "objectId", 'order': 0, 'type': 1}],
+        }
+        if filters is not None:
+            params.update(filters)
+
+        # Пачками выгружаем содержимое
+        is_end = False
+        offset = 0
+        limit = self.settings.kb_objects_batch_size
+        line_counter = 0
+        start_time = get_metrics_start_time()
+        while not is_end:
+            ret = self.__iterate_objects(url, params, headers, offset, limit)
+            if len(ret) < limit:
+                is_end = True
+            offset += limit
+            for i in ret:
+                line_counter += 1
+                yield {"id": i.get("Id"),
+                       "guid": i.get("ObjectId"),
+                       "name": i.get("SystemName"),
+                       "compilation_sdk": i.get("CompilationStatus", {}).get("SdkVersion"),
+                       "compilation_status": i.get("CompilationStatus", {}).get("CompilationStatusId")
+                       }
+        took_time = get_metrics_took_time(start_time)
+
+        self.log.info('status=success, action=get_all_macros, msg="Query executed, response have been read", '
+                      'hostname="{}", filter="{}", lines={}, db="{}"'.format(self.__kb_hostname,
+                                                                             filters,
+                                                                             line_counter,
+                                                                             db_name))
+        self.log.info('hostname="{}", metric=get_all_macros, took={}ms, objects={}'.format(self.__kb_hostname,
+                                                                                            took_time,
+                                                                                            line_counter))
+
+
     def __iterate_objects(self, url: str, params: dict, headers: dict, offset: int, limit: int):
         params["withoutGroups"] = False
         params["recursive"] = True
@@ -796,6 +848,52 @@ class KnowledgeBase(ModuleInterface, LoggingHandler):
                       'hostname="{}", db="{}"'.format(rule_id, self.__kb_hostname, db_name))
 
         return ret
+
+    def get_macros(self, db_name: str, macros_id: str) -> dict:
+        """
+        Получить полное описание и тело макроса.
+
+        :param db_name: Имя БД
+        :param macros_id: KB ID макроса
+        :return: {'param1': value, 'param2': value}
+        """
+
+        self.log.info('status=success, action=get_macros, msg="Try to get macros {}", '
+                      'hostname="{}", db="{}"'.format(macros_id, self.__kb_hostname, db_name))
+
+        headers = {'Content-Database': db_name,
+                   'Content-Locale': 'RUS'}
+        api_url = self.__api_macros_code.format(macros_id)
+        url = "https://{}:{}{}".format(self.__kb_hostname, self.__kb_port, api_url)
+
+        r = exec_request(self.__kb_session,
+                         url,
+                         method='GET',
+                         timeout=self.settings.connection_timeout,
+                         headers=headers)
+        macros = r.json()
+        
+        macros_args = []
+        if macros.get("Args"):
+            for i in macros.get("Args"):
+                macros_args.append({
+                    "index": i.get("Index"),
+                    "name": i.get("Name"),
+                    "type": i.get("Type"),
+                    "default_value": i.get("DefaultValue")
+                })
+
+        ret = {"id": macros.get("Id"),
+               "guid": macros.get("ObjectId"),
+               "name": macros.get("SystemName"),
+               "formula": macros.get("Text"),
+               "arguments": macros_args}
+
+        self.log.info('status=success, action=get_macros, msg="Got macros {}", '
+                      'hostname="{}", db="{}"'.format(macros_id, self.__kb_hostname, db_name))
+
+        return ret
+
 
     def get_table_info(self, db_name: str, table_id: str) -> dict:
         """
