@@ -574,7 +574,8 @@ class KnowledgeBase(ModuleInterface, LoggingHandler):
         """
         params = {"filters": {"SiemObjectType": ["Correlation"]}}
         if filters is not None:
-            filters.update(params)
+            filters = filters if 'filters' in filters else {"filters": filters}
+            filters['filters'].update(params['filters'])
         else:
             filters = params
 
