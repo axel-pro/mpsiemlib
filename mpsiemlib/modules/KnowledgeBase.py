@@ -3,10 +3,27 @@ import time
 
 from hashlib import sha256
 from typing import Iterator, Optional
+from copy import deepcopy
 
 from mpsiemlib.common import ModuleInterface, MPSIEMAuth, LoggingHandler, MPComponents, Settings, MPContentTypes
 from mpsiemlib.common import exec_request, get_metrics_start_time, get_metrics_took_time
 
+
+def deep_merge(target: Optional[dict], updates: dict) -> dict:
+    if target is None:
+        return deepcopy(updates)
+    
+    """Recursively merges two nested dictionaries."""
+    result = deepcopy(target)
+
+    for key, value in updates.items():
+        if isinstance(value, dict) and key in result and isinstance(result[key], dict):
+            # If both values are dicts, recurse
+            result[key] = deep_merge(result[key], value)
+        else:
+            # Otherwise, overwrite or add the key
+            result[key] = deepcopy(value)
+    return result
 
 class KnowledgeBase(ModuleInterface, LoggingHandler):
     """
@@ -82,6 +99,7 @@ class KnowledgeBase(ModuleInterface, LoggingHandler):
     # Статусы установки в SIEM для контента
     DEPLOYMENT_STATUS_INSTALLED = 'Installed'
     DEPLOYMENT_STATUS_NOT_INSTALLED = 'NotInstalled'
+    DEPLOYMENT_STATUS_OUTDATED = 'Outdated'
 
     # Таймаут операций установки/удаления контента из SIEM
     DEPLOYMENT_TIMEOUT = 10
@@ -557,12 +575,7 @@ class KnowledgeBase(ModuleInterface, LoggingHandler):
         :return: Iterator
         """
         params = {"filters": {"SiemObjectType": ["Normalization"]}}
-        if filters is not None:
-            filters.update(params)
-        else:
-            filters = params
-
-        return self.get_all_objects(db_name, filters)
+        return self.get_all_objects(db_name, deep_merge(filters, params))
 
     def get_correlations_list(self, db_name: str, filters: Optional[dict] = None) -> Iterator[dict]:
         """
@@ -573,13 +586,7 @@ class KnowledgeBase(ModuleInterface, LoggingHandler):
         :return: Iterator
         """
         params = {"filters": {"SiemObjectType": ["Correlation"]}}
-        if filters is not None:
-            filters = filters if 'filters' in filters else {"filters": filters}
-            filters['filters'].update(params['filters'])
-        else:
-            filters = params
-
-        return self.get_all_objects(db_name, filters)
+        return self.get_all_objects(db_name, deep_merge(filters, params))
 
     def get_enrichments_list(self, db_name: str, filters: Optional[dict] = None) -> Iterator[dict]:
         """
@@ -688,7 +695,7 @@ class KnowledgeBase(ModuleInterface, LoggingHandler):
                        "origin_id": i.get("OriginId"),
                        "compilation_sdk": i.get("CompilationStatus", {}).get("SdkVersion"),
                        "compilation_status": i.get("CompilationStatus", {}).get("CompilationStatusId"),
-                       "deployment_status": i.get("DeploymentStatus", '').lower()}
+                       "deployment_status": i.get("GeneralDeploymentStatus", '').lower()}
         took_time = get_metrics_took_time(start_time)
 
         self.log.info('status=success, action=get_all_objects, msg="Query executed, response have been read", '
@@ -842,7 +849,7 @@ class KnowledgeBase(ModuleInterface, LoggingHandler):
                "localization_rules": rule.get("LocalizationRules"),
                "compilation_sdk": rule.get("CompilationStatus", {}).get("SdkVersion"),
                "compilation_status": rule.get("CompilationStatus", {}).get("CompilationStatusId"),
-               "deployment_status": rule.get("DeploymentStatus", '').lower()}
+               "deployment_status": rule.get("GeneralDeploymentStatus", '').lower()}
         ret["hash"] = sha256(str(ret.get("formula", '')).encode("utf-8")).hexdigest()
 
         self.log.info('status=success, action=get_rule, msg="Got rule {}", '
@@ -944,7 +951,7 @@ class KnowledgeBase(ModuleInterface, LoggingHandler):
                "fill_type": table.get("FillType").lower(),
                "pdql": table.get("PdqlQuery"),
                "asset_groups": table.get("AssetGroups"),
-               "deployment_status": table.get("DeploymentStatus").lower()}
+               "deployment_status": table.get("GeneralDeploymentStatus").lower()}
 
         self.log.info('status=success, action=get_table_info, msg="Got table {}", '
                       'hostname="{}", db="{}"'.format(table_id, self.__kb_hostname, db_name))
