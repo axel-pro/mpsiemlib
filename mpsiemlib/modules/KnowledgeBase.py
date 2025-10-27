@@ -918,17 +918,20 @@ class KnowledgeBase(ModuleInterface, LoggingHandler):
         table = r.json()
 
         table_groups = []
-        for i in table.get("Groups"):
-            table_groups.append({"id": i.get("Id"), "name": i.get("SystemName")})
+        
+        if table.get("Groups") is not None:
+            for i in table.get("Groups"):
+                table_groups.append({"id": i.get("Id"), "name": i.get("SystemName")})
 
         table_fields = []
-        for i in table.get("Fields"):
-            table_fields.append({"name": i.get("Name"),
-                                 "mapping": i.get("Mapping"),
-                                 "type_id": i.get("TypeId"),
-                                 "primary_key": i.get("IsPrimaryKey"),
-                                 "indexed": i.get("IsIndex"),
-                                 "nullable": i.get("IsNullable")})
+        if table.get("Fields") is not None:
+            for i in table.get("Fields"):
+                table_fields.append({"name": i.get("Name"),
+                                    "mapping": i.get("Mapping"),
+                                    "type_id": i.get("TypeId"),
+                                    "primary_key": i.get("IsPrimaryKey"),
+                                    "indexed": i.get("IsIndex"),
+                                    "nullable": i.get("IsNullable")})
 
         ret = {"id": table.get("Id"),
                "guid": table.get("ObjectId"),
@@ -941,10 +944,11 @@ class KnowledgeBase(ModuleInterface, LoggingHandler):
                "fields": table_fields,
                "description": table.get("Description"),
                "groups": table_groups,
-               "fill_type": table.get("FillType").lower(),
+               "fill_type": table.get("FillType").lower() if table.get("FillType") is not None else None,
                "pdql": table.get("PdqlQuery"),
                "asset_groups": table.get("AssetGroups"),
-               "deployment_status": table.get("DeploymentStatus").lower()}
+               "deployment_status": table.get("DeploymentStatus").lower() if table.get("DeploymentStatus") is not None else None
+               }
 
         self.log.info('status=success, action=get_table_info, msg="Got table {}", '
                       'hostname="{}", db="{}"'.format(table_id, self.__kb_hostname, db_name))
