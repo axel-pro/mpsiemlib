@@ -23,7 +23,7 @@ class MPSIEMAuth(AuthInterface, LoggingHandler):
 
     __api_core_auth_login_page = '/ui/login'
     __api_core_auth_form_page = '/account/login?returnUrl=/#/authorization/landing'
-    __api_core_check_page = '/api/deployment_configuration/v1/system_info'
+    __api_core_check_page = '/app/mpx/api/deployment_configuration/v1/system_info'
 
     __kb_port = 8091
     __api_kb_auth_login_page = '/account/login'
